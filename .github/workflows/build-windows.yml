@@ -45,9 +45,11 @@ jobs:
           }
 
       - name: Compress build output
+        shell: powershell
         run: |
-          cd ${{ steps.find_dir.outputs.build_dir }}
-          powershell Compress-Archive * ../../../../../windows-release.zip
+          $buildDir = "${{ steps.find_dir.outputs.build_dir }}"
+          Write-Host "Compressing directory: $buildDir"
+          Compress-Archive -Path "$buildDir\*" -DestinationPath simple_live_app/build/windows-release.zip -Force
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
