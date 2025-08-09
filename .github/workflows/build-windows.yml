@@ -23,10 +23,6 @@ jobs:
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
 
-      - name: Clean flutter project
-        working-directory: simple_live_app
-        run: flutter clean
-
       - name: Get dependencies
         working-directory: simple_live_app
         run: flutter pub get
@@ -35,16 +31,12 @@ jobs:
         working-directory: simple_live_app
         run: flutter build windows --release
 
-      - name: List build output folder
-        run: dir simple_live_app\build\windows\runner\* /s
-        shell: powershell
-
       - name: Find build output directory
         id: find_dir
         shell: powershell
         run: |
-          if (Test-Path simple_live_app/build/windows/runner/x64/Release) {
-            echo "build_dir=simple_live_app/build/windows/runner/x64/Release" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          if (Test-Path simple_live_app/build/windows/x64/runner/Release) {
+            echo "build_dir=simple_live_app/build/windows/x64/runner/Release" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           } elseif (Test-Path simple_live_app/build/windows/runner/Release) {
             echo "build_dir=simple_live_app/build/windows/runner/Release" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           } else {
