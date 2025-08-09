@@ -1,21 +1,23 @@
 name: app-build-action
-#推送Tag时触发
+# 手动触发 + 推送 Tag 时触发
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
+
 jobs:
   build-mac-ios-android:
     runs-on: macos-latest
     permissions:
       contents: write
     steps:
-      #签出代码 
+      # 签出代码 
       - uses: actions/checkout@v4
         with:
           ref: master
 
-      #APK签名设置
+      # APK 签名设置
       - name: Download Android keystore
         id: android_keystore
         uses: timheuer/base64-to-file@v1.2
@@ -29,45 +31,45 @@ jobs:
           echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> simple_live_app/android/key.properties
           echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> simple_live_app/android/key.properties
      
-      #设置JAVA环境
+      # 设置 JAVA 环境
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: "17"
           cache: 'gradle'
       
-      #设置Flutter
+      # 设置 Flutter
       - name: Flutter action
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.x'
           cache: true 
 
-      # 打开MAC Desktop支持
+      # 打开 MAC Desktop 支持
       - name: Enable Flutter Desktop
         run: flutter config --enable-macos-desktop
 
-      #更新Flutter的packages
+      # 更新 Flutter packages
       - name: Restore packages
         run: |
           cd simple_live_app
           flutter pub get
 
-      # 安装appdmg npm install -g appdmg
+      # 安装 appdmg npm install -g appdmg
       - name: Install appdmg
         run: npm install -g appdmg
 
-      # 设置flutter_distributor环境
+      # 设置 flutter_distributor 环境
       - name: Install flutter_distributor
         run: dart pub global activate flutter_distributor
 
-      #打包APK
+      # 打包 APK
       - name: Build APK
         run: |
           cd simple_live_app
           flutter build apk --release --split-per-abi
       
-      #上传APK至Artifacts
+      # 上传 APK 至 Artifacts
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -77,13 +79,13 @@ jobs:
             simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
 
-      #打包iOS
+      # 打包 iOS
       - name: Build IPA
         run: |
           cd simple_live_app
           flutter build ios --release --no-codesign
       
-      #创建未签名ipa
+      # 创建未签名 ipa
       - name: Create IPA
         run: |
           cd simple_live_app
@@ -93,21 +95,20 @@ jobs:
           zip -q -r ios_no_sign.ipa Payload
           cd ../../..
       
-      #上传IPA至Artifacts
+      # 上传 IPA 至 Artifacts
       - name: Upload IPA to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ios
-          path: |
-            simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
+          path: simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
       
-      # 打包MAC
+      # 打包 MAC
       - name: Build MacOS
         run: |
           cd simple_live_app
           flutter_distributor package --platform macos --targets dmg,zip --skip-clean
 
-      # 上传MAC至Artifacts
+      # 上传 MAC 至 Artifacts
       - name: Upload MacOS to Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -116,7 +117,7 @@ jobs:
             simple_live_app/build/dist/*/*.dmg
             simple_live_app/build/dist/*/*.zip
 
-      #读取版本信息
+      # 读取版本信息
       - name: Read version
         id: version
         uses: juliangruber/read-file-action@v1
@@ -127,7 +128,7 @@ jobs:
       - name: Echo version content
         run: echo "${{ fromJson(steps.version.outputs.content).version_desc }}"
 
-      #上传至Release
+      # 上传至 Release
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
@@ -142,10 +143,9 @@ jobs:
             simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
             simple_live_app/build/dist/*/*.dmg
             simple_live_app/build/dist/*/*.zip
-      #完成
+      # 完成
       - run: echo "🍏 This job's status is ${{ job.status }}."
 
-  # 打包Linux
   build-linux:
     runs-on: ubuntu-22.04
     permissions:
@@ -155,7 +155,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: master
-      # 设置Flutter环境
+      # 设置 Flutter 环境
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -166,15 +166,15 @@ jobs:
         run: sudo apt-get update
       - name: Install Dependencies
         run: sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev mpv
-      # 打开Linux Desktop支持
+      # 打开 Linux Desktop 支持
       - name: Enable Flutter Desktop
         run: flutter config --enable-linux-desktop
-      # 更新Flutter的packages
+      # 更新 Flutter packages
       - name: Restore Packages
         run: |
           cd simple_live_app
           flutter pub get
-      # 设置flutter_distributor环境
+      # 设置 flutter_distributor 环境
       - name: Install flutter_distributor
         run: dart pub global activate flutter_distributor
       # build Linux ZIP\DMG
@@ -182,7 +182,7 @@ jobs:
         run: |
           cd simple_live_app
           flutter_distributor package --platform linux --targets deb,zip --skip-clean
-      # 上传Linux包至Artifacts
+      # 上传 Linux 包至 Artifacts
       - name: Upload Linux APP to Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -202,7 +202,7 @@ jobs:
       - name: Echo version content
         run: echo "${{ fromJson(steps.version.outputs.content).version_desc }}"
 
-      #上传至Release
+      # 上传至 Release
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
@@ -213,10 +213,9 @@ jobs:
           files: |
             simple_live_app/build/dist/*/*.deb
             simple_live_app/build/dist/*/*.zip
-        #完成
+      # 完成
       - run: echo "🍏 Linux job's status is ${{ job.status }}."
 
-  # 打包Windows
   build-windows:
     runs-on: windows-latest
     permissions:
@@ -226,7 +225,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: master
-      # 设置Flutter环境
+      # 设置 Flutter 环境
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -238,7 +237,7 @@ jobs:
         run: |
           cd simple_live_app
           flutter pub get
-      # 设置flutter_distributor环境
+      # 设置 flutter_distributor 环境
       - name: Install flutter_distributor
         run: dart pub global activate flutter_distributor
       # build Windows ZIP\MSIX
@@ -247,7 +246,7 @@ jobs:
           cd simple_live_app
           flutter_distributor package --platform windows --targets msix,zip --skip-clean
 
-      # 上传Windows至Artifacts
+      # 上传 Windows 至 Artifacts
       - name: Upload Windows APP to Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -267,7 +266,7 @@ jobs:
       - name: Echo version content
         run: echo "${{ fromJson(steps.version.outputs.content).version_desc }}"
 
-      #上传至Release
+      # 上传至 Release
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
@@ -279,5 +278,5 @@ jobs:
             simple_live_app/build/dist/*/*.msix
             simple_live_app/build/dist/*/*.zip
 
-      #完成
+      # 完成
       - run: echo "🍏 Windows job's status is ${{ job.status }}."
