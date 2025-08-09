@@ -1,7 +1,7 @@
 name: Build Windows App
 
 on:
-  workflow_dispatch: # 手动触发
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -11,45 +11,49 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      # 1. 拉取源码
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # 2. 安装指定版本的 Flutter
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.0'
           channel: stable
 
-      # 3. 启用 Windows 桌面支持
       - name: Enable Windows Desktop
         run: flutter config --enable-windows-desktop
 
-      # 4. 获取依赖（进入 simple_live_app 目录）
       - name: Get dependencies
         working-directory: simple_live_app
         run: flutter pub get
 
-      # 5. 编译 Windows 发行版
       - name: Build Windows release
         working-directory: simple_live_app
         run: flutter build windows --release
 
-      # 6. 打包成 ZIP
+      - name: Find build output directory
+        id: find_dir
+        run: |
+          if (Test-Path simple_live_app/build/windows/runner/x64/Release) {
+            echo "build_dir=simple_live_app/build/windows/runner/x64/Release" >> $GITHUB_OUTPUT
+          } elseif (Test-Path simple_live_app/build/windows/runner/Release) {
+            echo "build_dir=simple_live_app/build/windows/runner/Release" >> $GITHUB_OUTPUT
+          } else {
+            echo "Build output directory not found!" 1>&2
+            exit 1
+          }
+      
       - name: Compress build output
         run: |
-          cd simple_live_app/build/windows/runner/Release
+          cd ${{ steps.find_dir.outputs.build_dir }}
           powershell Compress-Archive * ../../../../../windows-release.zip
 
-      # 7. 上传到 Actions Artifacts（可在 Actions 结果下载）
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
           path: simple_live_app/build/windows-release.zip
 
-      # 8. 上传到 GitHub Releases（每次运行会生成一个新 tag）
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
