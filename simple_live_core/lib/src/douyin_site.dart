@@ -719,7 +719,7 @@ class DouyinSite implements LiveSite {
       var queryString = uri.query;
   
       var signResult = await HttpClient.instance.postJson(
-        "https://dy.nsapps.cn/abogus",
+        "http://192.168.2.92:7676/generate",
         header: {"Content-Type": "application/json"},
         data: {
           "getParams": queryString,  // 只传 query 部分给服务端
