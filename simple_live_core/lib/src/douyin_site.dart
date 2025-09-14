@@ -65,7 +65,7 @@ class DouyinSite implements LiveSite {
     var renderDataJson = json.decode(renderData
         .trim()
         .replaceAll('\\"', '"')
-        .replaceAll(r"\\", r"\")
+        .replaceAll("\\\\", "\\")
         .replaceAll(']\\n', ""));
 
     for (var item in renderDataJson["categoryData"]) {
@@ -436,7 +436,7 @@ class DouyinSite implements LiveSite {
     var str = renderData
         .trim()
         .replaceAll('\\"', '"')
-        .replaceAll(r"\\", r"\")
+        .replaceAll("\\\\", "\\")
         .replaceAll(']\\n', "");
     var renderDataJson = json.decode(str);
     return renderDataJson["state"];
