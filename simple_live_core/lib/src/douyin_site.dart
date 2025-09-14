@@ -714,16 +714,25 @@ class DouyinSite implements LiveSite {
   /// 服务端代码：https://github.com/dengmin/a-bogus，请自行部署后使用
   Future<String> getAbogusUrl(String url) async {
     try {
+      // 解析 URL
+      var uri = Uri.parse(url);
+      var queryString = uri.query;
+  
       var signResult = await HttpClient.instance.postJson(
         "https://dy.nsapps.cn/abogus",
-        queryParameters: {},
         header: {"Content-Type": "application/json"},
-        data: {"url": url, "userAgent": kDefaultUserAgent},
+        data: {
+          "getParams": queryString,  // 只传 query 部分给服务端
+          "userAgent": kDefaultUserAgent,
+        },
       );
-      return signResult["data"]["url"];
+  
+      // 拼接完整 URL
+      var finalUrl = "${uri.scheme}://${uri.host}${uri.path}?${signResult["finalUrl"]}";
+      return finalUrl;
     } catch (e) {
       CoreLog.error(e);
       return url;
     }
   }
-}
+
