@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -10,7 +11,7 @@ class DouyinSite implements LiveSite {
   String id = "douyin";
 
   @override
-  String name = "抖音直播";
+  String name = "抖音直播(DY)";
 
   @override
   LiveDanmaku getDanmaku() =>
@@ -580,7 +581,7 @@ class DouyinSite implements LiveSite {
       }
     }
     // var qualityData = json.decode(
-    //     detail.data["live_core_sdk_data"]["pull_data"]["stream_data"])["data"];
+    //      detail.data["live_core_sdk_data"]["pull_data"]["stream_data"])["data"];
 
     qualities.sort((a, b) => b.sort.compareTo(a.sort));
     return qualities;
