@@ -654,9 +654,9 @@ class DouyinSite implements LiveSite {
 
   @override
   Future<bool> getLiveStatus({required String roomId}) async {
-    var result = await getRoomDetail(roomId: roomId);
-    return result.baseDetail.status;
-  }
+  var result = await getRoomDetail(roomId: roomId);
+  return result.status; 
+}
 
   @override
   Future<List<LiveSuperChatMessage>> getSuperChatMessage(
