@@ -1,0 +1,67 @@
+name: Build Windows App
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.22.0'
+          channel: stable
+
+      - name: Enable Windows Desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Get dependencies
+        working-directory: simple_live_app
+        run: flutter pub get
+
+      - name: Build Windows release
+        working-directory: simple_live_app
+        run: flutter build windows --release
+
+      - name: Find build output directory
+        id: find_dir
+        shell: powershell
+        run: |
+          if (Test-Path simple_live_app/build/windows/x64/runner/Release) {
+            echo "build_dir=simple_live_app/build/windows/x64/runner/Release" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } elseif (Test-Path simple_live_app/build/windows/runner/Release) {
+            echo "build_dir=simple_live_app/build/windows/runner/Release" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            Write-Error "Build output directory not found!"
+            exit 1
+          }
+
+      - name: Compress build output
+        shell: powershell
+        run: |
+          $buildDir = "${{ steps.find_dir.outputs.build_dir }}"
+          Write-Host "Compressing directory: $buildDir"
+          Compress-Archive -Path "$buildDir\*" -DestinationPath simple_live_app/build/windows-release.zip -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: simple_live_app/build/windows-release.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: windows-build-${{ github.run_number }}
+          name: "Windows Build ${{ github.run_number }}"
+          files: simple_live_app/build/windows-release.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
