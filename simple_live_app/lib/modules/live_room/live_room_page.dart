@@ -351,22 +351,26 @@ class LiveRoomPage extends GetView<LiveRoomController> {
             ),
             AppStyle.hGap12,
             Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Remix.fire_fill,
-                  size: 20,
-                  color: Colors.orange,
-                ),
-                AppStyle.hGap4,
-                Text(
-                  Utils.onlineToString(
-                    controller.detail.value?.online ?? 0,
-                  ),
-                  style: const TextStyle(fontSize: 14),
-                ),
-              ],
-            ),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Remix.fire_fill,
+                  size: 20,
+                  color: Colors.orange,
+                ),
+                AppStyle.hGap4,
+                Text(
+                  // *** 核心改动：使用 controller.online.value ***
+                  Utils.onlineToString(
+                    // 优先使用实时更新的 online.value，如果为0，则回退到 detail.value?.online
+                    controller.online.value > 0
+                        ? controller.online.value
+                        : controller.detail.value?.online ?? 0,
+                  ),
+                  style: const TextStyle(fontSize: 14),
+                ),
+              ],
+            ),
           ],
         ),
       ),
