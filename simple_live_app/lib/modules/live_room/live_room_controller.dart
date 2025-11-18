@@ -83,6 +83,9 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
 
   Timer? autoExitTimer;
 
+  /// 在线人数轮询定时器 (新增)
+  Timer? _onlinePollingTimer;
+
   /// 设置的自动关闭时间（分钟）
   var autoExitMinutes = 60.obs;
 
@@ -119,6 +122,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     loadData();
 
     scrollController.addListener(scrollListener);
+
+    _startOnlinePolling(); // <--- 新增：启动在线人数轮询
 
     super.onInit();
   }
@@ -173,6 +178,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       }
     });
   }
+
   // 弹窗逻辑
 
   void refreshRoom() {
@@ -181,6 +187,37 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     liveDanmaku.stop();
 
     loadData();
+  }
+
+  /// 启动在线人数轮询 (新增)
+  void _startOnlinePolling() {
+    // 确保没有重复的定时器
+    _onlinePollingTimer?.cancel();
+
+    // 每 5 秒轮询一次
+    _onlinePollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      // 只有在直播状态下才进行轮询
+      if (liveStatus.value) {
+        _updateOnlineCount();
+      }
+    });
+  }
+
+  /// 独立更新在线人数 (新增)
+  void _updateOnlineCount() async {
+    try {
+      // 调用接口获取 LiveRoomDetail，但只用于更新 online 属性
+      LiveRoomDetail? currentDetail =
+          await site.liveSite.getRoomDetail(roomId: roomId);
+
+      if (currentDetail != null) {
+        // 更新在线人数
+        online.value = currentDetail.online;
+      }
+    } catch (e) {
+      Log.logPrint("在线人数轮询失败: $e");
+      // 轮询失败时可以选择不打扰用户
+    }
   }
 
   /// 聊天栏始终滚动到底部
@@ -249,7 +286,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
         ),
       ]);
     } else if (msg.type == LiveMessageType.online) {
-      online.value = msg.data;
+      // online.value = msg.data; // <--- 保留：通过 WebSocket 获取场观人数
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
     }
@@ -319,7 +356,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       addHistory();
       // 确认房间关注状态
       followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
-      online.value = detail.value!.online;
+      online.value = detail.value!.online; // <--- 保留：通过 loadData 获取在线人数
       liveStatus.value = detail.value!.status || detail.value!.isRecord;
       if (liveStatus.value) {
         getPlayQualites();
@@ -1066,6 +1103,7 @@ ${error?.stackTrace}''');
     WidgetsBinding.instance.removeObserver(this);
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
+    _onlinePollingTimer?.cancel(); // <--- 新增：取消在线人数轮询定时器
 
     liveDanmaku.stop();
     danmakuController = null;
