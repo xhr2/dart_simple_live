@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -11,6 +12,9 @@ class DouyinSite implements LiveSite {
 
   @override
   String name = "抖音直播";
+
+  // 用于控制轮询的计时器
+  Timer? _pollingTimer;
 
   @override
   LiveDanmaku getDanmaku() =>
@@ -227,49 +231,34 @@ class DouyinSite implements LiveSite {
 
   @override
   Future<LiveRoomDetail> getRoomDetail({required String roomId}) async {
+    LiveRoomDetail roomDetail;
     // 有两种roomId，一种是webRid，一种是roomId
-    // roomId是一次性的，用户每次重新开播都会生成一个新的roomId
-    // roomId一般长度为19位，例如：7376429659866598196
-    // webRid是固定的，用户每次开播都是同一个webRid
-    // webRid一般长度为11-12位，例如：416144012050
-    // 这里简单进行判断，如果roomId长度小于15，则认为是webRid
+    // 这里简单进行判断，如果roomId长度小于16，则认为是webRid
     if (roomId.length <= 16) {
-      var webRid = roomId;
-      return await getRoomDetailByWebRid(webRid);
+      roomDetail = await getRoomDetailByWebRid(roomId);
+    } else {
+      roomDetail = await getRoomDetailByRoomId(roomId);
     }
-
-    return await getRoomDetailByRoomId(roomId);
+    
+    // 注意：这里不能返回DouyinLiveRoomDetail，因为函数返回类型是Future<LiveRoomDetail>
+    // 我们需要返回一个标准的LiveRoomDetail对象
+    return roomDetail;
   }
 
   /// 通过roomId获取直播间信息
-  /// - [roomId] 直播间ID
-  /// - 返回直播间信息
   Future<LiveRoomDetail> getRoomDetailByRoomId(String roomId) async {
-    // 读取房间信息
     var roomData = await _getRoomDataByRoomId(roomId);
-
-    // 通过房间信息获取WebRid
     var webRid = roomData["data"]["room"]["owner"]["web_rid"].toString();
-
-    // 读取用户唯一ID，用于弹幕连接
-    // 似乎这个参数不是必须的，先随机生成一个
-    //var userUniqueId = await _getUserUniqueId(webRid);
     var userUniqueId = generateRandomNumber(12).toString();
-
     var room = roomData["data"]["room"];
     var owner = room["owner"];
-
     var status = asT<int?>(room["status"]) ?? 0;
 
-    // roomId是一次性的，用户每次重新开播都会生成一个新的roomId
-    // 所以如果roomId对应的直播间状态不是直播中，就通过webRid获取直播间信息
     if (status == 4) {
-      var result = await getRoomDetailByWebRid(webRid);
-      return result;
+      return await getRoomDetailByWebRid(webRid);
     }
 
     var roomStatus = status == 2;
-    // 主要是为了获取cookie,用于弹幕websocket连接
     var headers = await getRequestHeaders();
 
     return LiveRoomDetail(
@@ -296,12 +285,9 @@ class DouyinSite implements LiveSite {
   }
 
   /// 通过WebRid获取直播间信息
-  /// - [webRid] 直播间RID
-  /// - 返回直播间信息
   Future<LiveRoomDetail> getRoomDetailByWebRid(String webRid) async {
     try {
-      var result = await _getRoomDetailByWebRidApi(webRid);
-      return result;
+      return await _getRoomDetailByWebRidApi(webRid);
     } catch (e) {
       CoreLog.error(e);
     }
@@ -309,26 +295,16 @@ class DouyinSite implements LiveSite {
   }
 
   /// 通过WebRid访问直播间API，从API中获取直播间信息
-  /// - [webRid] 直播间RID
-  /// - 返回直播间信息
   Future<LiveRoomDetail> _getRoomDetailByWebRidApi(String webRid) async {
-    // 读取房间信息
     var data = await _getRoomDataByApi(webRid);
     var roomData = data["data"][0];
     var userData = data["user"];
     var roomId = roomData["id_str"].toString();
-
-    // 读取用户唯一ID，用于弹幕连接
-    // 似乎这个参数不是必须的，先随机生成一个
-    //var userUniqueId = await _getUserUniqueId(webRid);
     var userUniqueId = generateRandomNumber(12).toString();
-
     var owner = roomData["owner"];
-
     var roomStatus = (asT<int?>(roomData["status"]) ?? 0) == 2;
-
-    // 主要是为了获取cookie,用于弹幕websocket连接
     var headers = await getRequestHeaders();
+
     return LiveRoomDetail(
       roomId: webRid,
       title: roomData["title"].toString(),
@@ -357,20 +333,15 @@ class DouyinSite implements LiveSite {
   }
 
   /// 通过WebRid访问直播间网页，从网页HTML中获取直播间信息
-  /// - [webRid] 直播间RID
-  /// - 返回直播间信息
   Future<LiveRoomDetail> _getRoomDetailByWebRidHtml(String webRid) async {
     var roomData = await _getRoomDataByHtml(webRid);
     var roomId = roomData["roomStore"]["roomInfo"]["room"]["id_str"].toString();
     var userUniqueId =
         roomData["userStore"]["odin"]["user_unique_id"].toString();
-
     var room = roomData["roomStore"]["roomInfo"]["room"];
     var owner = room["owner"];
     var anchor = roomData["roomStore"]["roomInfo"]["anchor"];
     var roomStatus = (asT<int?>(room["status"]) ?? 0) == 2;
-
-    // 主要是为了获取cookie,用于弹幕websocket连接
     var headers = await getRequestHeaders();
 
     return LiveRoomDetail(
@@ -400,9 +371,6 @@ class DouyinSite implements LiveSite {
     );
   }
 
-  /// 读取用户的唯一ID
-  /// - [webRid] 直播间RID
-  // ignore: unused_element
   Future<String> _getUserUniqueId(String webRid) async {
     try {
       var webInfo = await _getRoomDataByHtml(webRid);
@@ -412,8 +380,6 @@ class DouyinSite implements LiveSite {
     }
   }
 
-  /// 进入直播间前需要先获取cookie
-  /// - [webRid] 直播间RID
   Future<String> _getWebCookie(String webRid) async {
     var headResp = await HttpClient.instance.head(
       "https://live.douyin.com/$webRid",
@@ -435,8 +401,6 @@ class DouyinSite implements LiveSite {
     return dyCookie;
   }
 
-  /// 通过webRid获取直播间Web信息
-  /// - [webRid] 直播间RID
   Future<Map> _getRoomDataByHtml(String webRid) async {
     var dyCookie = await _getWebCookie(webRid);
     var result = await HttpClient.instance.getText(
@@ -463,8 +427,6 @@ class DouyinSite implements LiveSite {
     return renderDataJson["state"];
   }
 
-  /// 通过webRid获取直播间Web信息
-  /// - [webRid] 直播间RID
   Future<Map> _getRoomDataByApi(String webRid) async {
     String serverUrl = "https://live.douyin.com/webcast/room/web/enter/";
     var uri = Uri.parse(serverUrl)
@@ -498,8 +460,6 @@ class DouyinSite implements LiveSite {
     return result["data"];
   }
 
-  /// 通过roomId获取直播间信息
-  /// - [roomId] 直播间ID
   Future<Map> _getRoomDataByRoomId(String roomId) async {
     var result = await HttpClient.instance.getJson(
       'https://webcast.amemv.com/webcast/room/reflow/info/',
@@ -520,7 +480,6 @@ class DouyinSite implements LiveSite {
   Future<List<LivePlayQuality>> getPlayQualites(
       {required LiveRoomDetail detail}) async {
     List<LivePlayQuality> qualities = [];
-
     var qulityList =
         detail.data["live_core_sdk_data"]["pull_data"]["options"]["qualities"];
     var streamData = detail.data["live_core_sdk_data"]["pull_data"]
@@ -560,7 +519,6 @@ class DouyinSite implements LiveSite {
         List<String> urls = [];
         var flvUrl =
             qualityData[quality["sdk_key"]]?["main"]?["flv"]?.toString();
-
         if (flvUrl != null && flvUrl.isNotEmpty) {
           urls.add(flvUrl);
         }
@@ -579,9 +537,6 @@ class DouyinSite implements LiveSite {
         }
       }
     }
-    // var qualityData = json.decode(
-    //     detail.data["live_core_sdk_data"]["pull_data"]["stream_data"])["data"];
-
     qualities.sort((a, b) => b.sort.compareTo(a.sort));
     return qualities;
   }
@@ -633,7 +588,6 @@ class DouyinSite implements LiveSite {
       "round_trip_time": "100",
       "webid": "7382872326016435738",
     });
-    //var requlestUrl = await getAbogusUrl(uri.toString());
     var requlestUrl = uri.toString();
     var headResp = await HttpClient.instance
         .head('https://live.douyin.com', header: headers);
@@ -696,13 +650,46 @@ class DouyinSite implements LiveSite {
   @override
   Future<bool> getLiveStatus({required String roomId}) async {
     var result = await getRoomDetail(roomId: roomId);
-    return result.status;
+    return result.status; 
   }
 
   @override
   Future<List<LiveSuperChatMessage>> getSuperChatMessage(
       {required String roomId}) {
     return Future.value(<LiveSuperChatMessage>[]);
+  }
+
+  // 新增的方法，用于轮询在线人数
+  void _pollOnlineUsers(
+    String webRid,
+    Function(int) onUpdate,
+    Function(String) onError,
+  ) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (timer) async {
+      try {
+        var result = await _getRoomDataByApi(webRid);
+        var roomData = result["data"][0];
+        var onlineCount =
+            asT<int?>(roomData["room_view_stats"]["display_value"]) ?? 0;
+        var roomStatus = (asT<int?>(roomData["status"]) ?? 0) == 2;
+
+        if (!roomStatus) {
+          _pollingTimer?.cancel();
+          return;
+        }
+
+        onUpdate(onlineCount);
+      } catch (e) {
+        _pollingTimer?.cancel();
+        onError("Failed to poll online users: $e");
+      }
+    });
+  }
+
+  // 新增的方法，用于停止轮询
+  void stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
   }
 
   //生成指定长度的16进制随机字符串
@@ -727,4 +714,17 @@ class DouyinSite implements LiveSite {
     return int.tryParse(stringBuffer.toString()) ??
         Random().nextInt(1000000000);
   }
+}
+
+// 原有的DouyinLiveRoomDetail类仍然保留，但不作为getRoomDetail方法的返回值
+class DouyinLiveRoomDetail {
+  final LiveRoomDetail baseDetail;
+  final void Function(Function(int), Function(String)) pollOnlineUsers;
+  final void Function() stopPolling;
+
+  DouyinLiveRoomDetail({
+    required this.baseDetail,
+    required this.pollOnlineUsers,
+    required this.stopPolling,
+  });
 }
