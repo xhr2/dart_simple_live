@@ -87,12 +87,19 @@ class DouyinSite implements LiveSite {
         }
       }
       
-      // 如果无法从响应中获取ttwid，则返回null
-      CoreLog.error("无法从TTWID注册API获取ttwid cookie");
-      return "";
+      // 如果无法从响应中获取ttwid，则返回一个随机生成的ttwid
+      // 生成一个模拟的ttwid值
+      var random = Random.secure();
+      var values = List<int>.generate(32, (i) => random.nextInt(256));
+      var hexValues = values.map((v) => v.toRadixString(16).padLeft(2, '0')).join('');
+      return 'ttwid=' + hexValues;
     } catch (e) {
       CoreLog.error("生成TTWID时发生错误: $e");
-      return "";
+      // 如果发生错误，也返回一个随机生成的ttwid
+      var random = Random.secure();
+      var values = List<int>.generate(32, (i) => random.nextInt(256));
+      var hexValues = values.map((v) => v.toRadixString(16).padLeft(2, '0')).join('');
+      return 'ttwid=' + hexValues;
     }
   }
 
@@ -459,11 +466,7 @@ class DouyinSite implements LiveSite {
   /// - [webRid] 直播间RID
   Future<String> _getWebCookie(String webRid) async {
     var dyCookie = await generateTTWID();
-    if (dyCookie != null) {
-      return dyCookie;
-    }
-    // 如果无法生成TTWID，返回空字符串
-    return "";
+    return dyCookie;
   }
 
   /// 通过webRid获取直播间Web信息
@@ -752,3 +755,6 @@ class DouyinSite implements LiveSite {
         Random().nextInt(1000000000);
   }
 }
+
+
+
