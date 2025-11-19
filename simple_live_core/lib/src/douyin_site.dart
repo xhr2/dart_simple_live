@@ -89,10 +89,10 @@ class DouyinSite implements LiveSite {
       
       // 如果无法从响应中获取ttwid，则返回null
       CoreLog.error("无法从TTWID注册API获取ttwid cookie");
-      return null;
+      return "";
     } catch (e) {
       CoreLog.error("生成TTWID时发生错误: $e");
-      return null;
+      return "";
     }
   }
 
