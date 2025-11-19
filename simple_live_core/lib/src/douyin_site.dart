@@ -1,10 +1,57 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:http/http.dart' as http;
 
 import 'package:simple_live_core/simple_live_core.dart';
 import 'package:simple_live_core/src/common/convert_helper.dart';
 import 'package:simple_live_core/src/common/http_client.dart';
+
+// =================================================================
+// 外部签名服务实现 (返回查询参数部分)
+// =================================================================
+
+/// 调用本地 Python 签名服务，接收原始查询参数字符串，返回带签名的查询参数字符串
+Future<String> _calculateAbogusParams(String originalParams, String userAgent) async {
+  // 您的本地签名服务地址
+  const signingServiceUrl = 'http://192.168.2.92:7676/generate';
+  
+  final params = {
+    "getParams": originalParams, // 原始查询参数字符串 (如: aid=6383&app_name=...)
+    "userAgent": userAgent,
+  };
+
+  try {
+    final response = await http.post(
+      Uri.parse(signingServiceUrl),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(params),
+    );
+
+    if (response.statusCode == 200) {
+      final jsonResponse = json.decode(utf8.decode(response.bodyBytes));
+      // 假设 Python 服务返回 {"finalUrl": "aid=...&x-bogus=..."} 
+      final signedParams = jsonResponse['finalUrl']?.toString(); 
+      
+      if (signedParams != null && signedParams.isNotEmpty) {
+        return signedParams;
+      } else {
+        CoreLog.error("签名服务返回的 finalUrl 为空或不正确。");
+        throw Exception("签名服务返回的数据格式错误或 finalUrl 缺失。");
+      }
+    } else {
+      CoreLog.error("签名服务请求失败，状态码: ${response.statusCode}");
+      throw Exception("签名服务请求失败，状态码: ${response.statusCode}");
+    }
+  } catch (e) {
+    CoreLog.error('调用签名服务时出错: $e');
+    throw Exception('无法获取签名参数: $e'); 
+  }
+}
+
+// =================================================================
+// DouyinSite 类 (已修改签名函数和调用逻辑)
+// =================================================================
 
 class DouyinSite implements LiveSite {
   @override
@@ -20,16 +67,13 @@ class DouyinSite implements LiveSite {
   LiveDanmaku getDanmaku() =>
       DouyinDanmaku()..setSignatureFunction(getSignature);
 
-  Future<String> Function(String, String) getAbogusUrl =
-      (url, userAgent) async {
-    throw Exception(
-        "You must call setAbogusUrlFunction to set the function first");
-  };
+  // ⚠️ 修正: getAbogusUrl 改名为 getAbogusParams，并初始化为返回参数的函数
+  Future<String> Function(String, String) getAbogusParams = _calculateAbogusParams;
 
-  void setAbogusUrlFunction(Future<String> Function(String, String) func) {
-    getAbogusUrl = func;
+  void setAbogusParamsFunction(Future<String> Function(String, String) func) {
+    getAbogusParams = func;
   }
-
+  
   Future<String> Function(String, String) getSignature =
       (roomId, uniqueId) async {
     throw Exception(
@@ -155,7 +199,11 @@ class DouyinSite implements LiveSite {
       "partition_type": partitionType,
       "req_from": '2'
     });
-    var requestUrl = await getAbogusUrl(uri.toString(), kDefaultUserAgent);
+    
+    // ⚠️ 修正调用逻辑：获取参数，然后拼接 URL
+    var originalParams = uri.query;
+    var signedParams = await getAbogusParams(originalParams, kDefaultUserAgent);
+    var requestUrl = '$serverUrl?$signedParams';
 
     var result = await HttpClient.instance.getJson(
       requestUrl,
@@ -205,7 +253,11 @@ class DouyinSite implements LiveSite {
       "partition_type": '1',
       "req_from": '2'
     });
-    var requestUrl = await getAbogusUrl(uri.toString(), kDefaultUserAgent);
+    
+    // ⚠️ 修正调用逻辑：获取参数，然后拼接 URL
+    var originalParams = uri.query;
+    var signedParams = await getAbogusParams(originalParams, kDefaultUserAgent);
+    var requestUrl = '$serverUrl?$signedParams';
 
     var result = await HttpClient.instance.getJson(
       requestUrl,
@@ -449,7 +501,11 @@ class DouyinSite implements LiveSite {
       "browser_name": "Edge",
       "browser_version": "125.0.0.0"
     });
-    var requestUrl = await getAbogusUrl(uri.toString(), kDefaultUserAgent);
+    
+    // ⚠️ 修正调用逻辑：获取参数，然后拼接 URL
+    var originalParams = uri.query;
+    var signedParams = await getAbogusParams(originalParams, kDefaultUserAgent);
+    var requestUrl = '$serverUrl?$signedParams';
 
     var requestHeader = await getRequestHeaders();
     var result = await HttpClient.instance.getJson(
@@ -588,7 +644,10 @@ class DouyinSite implements LiveSite {
       "round_trip_time": "100",
       "webid": "7382872326016435738",
     });
-    var requlestUrl = uri.toString();
+    // 搜索接口不确定是否需要 abogus 签名，暂时保持原样，如果失败可能需要进一步调整
+    var requlestUrl = uri.toString(); 
+    
+    // ... (省略 getJson 的调用和处理部分，与原代码一致)
     var headResp = await HttpClient.instance
         .head('https://live.douyin.com', header: headers);
     var dyCookie = "";
@@ -650,7 +709,7 @@ class DouyinSite implements LiveSite {
   @override
   Future<bool> getLiveStatus({required String roomId}) async {
     var result = await getRoomDetail(roomId: roomId);
-    return result.status; 
+    return result.status;
   }
 
   @override
@@ -716,7 +775,7 @@ class DouyinSite implements LiveSite {
   }
 }
 
-// 原有的DouyinLiveRoomDetail类仍然保留，但不作为getRoomDetail方法的返回值
+// 原有的DouyinLiveRoomDetail类仍然保留
 class DouyinLiveRoomDetail {
   final LiveRoomDetail baseDetail;
   final void Function(Function(int), Function(String)) pollOnlineUsers;
