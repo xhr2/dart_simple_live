@@ -59,11 +59,11 @@ function getABogus(params, userAgent) {
 
         const resp = JSON.parse(xhr.responseText);
 
-        if (!resp.finalUrl) {
+        if (!resp.a_bogus) {
             throw new Error("接口未返回 finalUrl: " + xhr.responseText);
         }
 
-        return resp.finalUrl;
+        return resp.a_bogus;
     }
 
     // =============================
