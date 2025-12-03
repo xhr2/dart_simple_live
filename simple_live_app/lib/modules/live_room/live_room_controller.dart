@@ -82,7 +82,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   var countdown = 60.obs;
 
   Timer? autoExitTimer;
-  /// 在线人数轮询定时器 💡 新增
+  /// 在线人数轮询定时器
   Timer? _onlinePollingTimer;
 
   /// 设置的自动关闭时间（分钟）
@@ -181,7 +181,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     //messages.clear();
     superChats.clear();
     liveDanmaku.stop();
-    _onlinePollingTimer?.cancel(); // 刷新时停止在线人数轮询
+    _onlinePollingTimer?.cancel(); // 刷新时停止在线人数轮询
 
     loadData();
   }
@@ -251,12 +251,11 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
           ),
         ),
       ]);
-    } else if (msg.type == LiveMessageType.online) {
-      online.value = msg.data;
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
     }
   }
+  // 注意：已移除 LiveMessageType.online 的处理逻辑，在线人数将通过轮询更新。
 
   /// 添加一条系统消息
   void addSysMsg(String msg) {
@@ -280,7 +279,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     addSysMsg("弹幕服务器连接正常");
   }
 
-  /// 独立获取在线人数的方法 💡 新增
+  /// 独立获取在线人数的方法
   void fetchOnlineUsers() async {
     if (detail.value == null) {
       return;
@@ -293,8 +292,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
 
     try {
-      // 重新获取直播间详情，或者调用获取在线人数的轻量级接口（如果有的话）
-      // 这里假设 getRoomDetail 能够获取到最新的在线人数
+      // 重新获取直播间详情，获取最新的在线人数
       var newDetail = await site.liveSite.getRoomDetail(roomId: roomId);
 
       // 更新在线人数
@@ -305,7 +303,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     }
   }
 
-  /// 启动在线人数轮询 💡 新增
+  /// 启动在线人数轮询
   void startOnlinePolling() {
     // 确保之前没有定时器在运行
     _onlinePollingTimer?.cancel();
@@ -313,13 +311,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     // 立即获取一次在线人数
     fetchOnlineUsers();
 
-    // 设置 10 秒轮询一次
+    // 设置 10 秒轮询一次 (可根据需求调整频率)
     _onlinePollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       fetchOnlineUsers();
     });
   }
 
-  /// 加载直播间信息 
+  /// 加载直播间信息
   void loadData() async {
     try {
       SmartDialog.showLoading(msg: "");
@@ -361,11 +359,13 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       addHistory();
       // 确认房间关注状态
       followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
-      // online.value = detail.value!.online; // ⚠️ 移除：改为轮询获取
       liveStatus.value = detail.value!.status || detail.value!.isRecord;
-      
-      // 💡 调用新的轮询方法
-      startOnlinePolling(); 
+      
+      // 1. 初始化在线人数
+      online.value = detail.value!.online;
+
+      // 2. 启动在线人数轮询
+      startOnlinePolling();
 
       if (liveStatus.value) {
         getPlayQualites();
@@ -506,7 +506,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     // 遍历线路，如果全部链接都断开就是直播结束了
     if (playUrls.length - 1 == currentLineIndex) {
       liveStatus.value = false;
-      _onlinePollingTimer?.cancel(); // 直播结束，停止在线人数轮询
+      _onlinePollingTimer?.cancel(); // 直播结束，停止在线人数轮询
     } else {
       changePlayLine(currentLineIndex + 1);
 
@@ -1029,7 +1029,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     messages.clear();
     superChats.clear();
     danmakuController?.clear();
-    _onlinePollingTimer?.cancel(); // 重置房间时取消在线人数轮询
+    _onlinePollingTimer?.cancel(); // 重置房间时取消在线人数轮询
 
     // 重新设置LiveDanmaku
     liveDanmaku = site.liveSite.getDanmaku();
@@ -1104,7 +1104,7 @@ ${error?.stackTrace}''');
     WidgetsBinding.instance.removeObserver(this);
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
-    _onlinePollingTimer?.cancel(); // 💡 页面关闭时取消在线人数轮询定时器
+    _onlinePollingTimer?.cancel(); // 页面关闭时取消在线人数轮询定时器
 
     liveDanmaku.stop();
     danmakuController = null;
