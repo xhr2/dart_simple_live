@@ -15,10 +15,9 @@ jobs:
       contents: write
 
     steps:
-      # 签出代码（已修复）
+      # 签出代码（已修复，不再使用 ref: dev）
       - uses: actions/checkout@v4
         with:
-          ref: refs/heads/dev
           fetch-depth: 1
 
       # APK签名设置
@@ -130,11 +129,11 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+
     steps:
       # 签出代码（已修复）
       - uses: actions/checkout@v4
         with:
-          ref: refs/heads/dev
           fetch-depth: 1
 
       # 设置Flutter环境
@@ -187,11 +186,11 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+
     steps:
       # 签出代码（已修复）
       - uses: actions/checkout@v4
         with:
-          ref: refs/heads/dev
           fetch-depth: 1
 
       # 设置Flutter
