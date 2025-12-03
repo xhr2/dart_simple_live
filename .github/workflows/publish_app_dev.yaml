@@ -22,6 +22,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          # 请根据您的项目需要，设置精确的 Flutter 版本
           flutter-version: "3.38.x"
           cache: true
 
@@ -31,9 +32,8 @@ jobs:
 
       # 4. 更新依赖
       - name: Restore Packages
-        run: |
-          cd simple_live_app
-          flutter pub get
+        run: flutter pub get
+        working-directory: simple_live_app # 在 simple_live_app 目录下执行
 
       # 5. 安装 flutter_distributor
       - name: Install flutter_distributor
@@ -41,26 +41,27 @@ jobs:
 
       # 6. 构建 Windows MSIX 和 ZIP
       - name: Build Windows
-        run: |
-          cd simple_live_app
-          flutter_distributor package --platform windows --targets msix,zip --skip-clean
+        run: flutter_distributor package --platform windows --targets msix,zip --skip-clean
+        working-directory: simple_live_app # 在 simple_live_app 目录下执行
 
-      # 7. 打印 build 目录结构（用于调试产物路径）
+      # 7. 打印 build 目录结构（修复了 Windows 上的 dir /s 错误）
       - name: Show build output
+        # 在 Windows Runner (默认 PowerShell) 上使用 ls (Get-ChildItem) 和 -Recurse
         run: |
-          cd simple_live_app
           echo "======= Windows build output ======="
-          dir /s build
+          ls build -Recurse
+        working-directory: simple_live_app # 在 simple_live_app 目录下执行
 
       # 8. 上传产物到 GitHub Artifacts
       - name: Upload Windows APP to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows
-          # 通配符匹配所有子目录下的 msix 和 zip
+          # 使用完整的相对路径，确保无论 working-directory 如何设置，都能找到产物
           path: |
             simple_live_app/build/**/*.msix
             simple_live_app/build/**/*.zip
 
       # 9. 输出 job 状态
-      - run: echo "🍏 Windows job's status is ${{ job.status }}."
+      - name: Print Job Status
+        run: echo "🍏 Windows job's status is ${{ job.status }}."
