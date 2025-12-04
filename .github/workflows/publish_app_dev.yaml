@@ -1,10 +1,15 @@
-name: app-build-action-dev-windows
+name: Build Windows App (Master)
 
 on:
+  # 允许手动触发
   workflow_dispatch:
+  # 监听 master 分支的推送
   push:
-    tags:
-      - "dev_v*"
+    branches:
+      - master
+    paths:
+      - 'simple_live_app/**'
+      - '.github/workflows/**'
 
 jobs:
   build-windows:
@@ -13,62 +18,81 @@ jobs:
       contents: write
 
     steps:
-      # 1. Checkout 代码
-      - uses: actions/checkout@v4
+      # 1. 签出代码 (切换到 master 分支)
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
+          ref: master
           fetch-depth: 1
 
-      # 2. 设置 Flutter
+      # 2. 设置 Flutter 环境 (使用 stable 渠道)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # 请根据您的项目需要，设置精确的 Flutter 版本
-          flutter-version: "3.38.x"
+          channel: 'stable'
           cache: true
 
-      # 3. 启用 Windows Desktop
+      # 3. 开启 Windows 桌面端支持
       - name: Enable Flutter Desktop
         run: flutter config --enable-windows-desktop
 
-      # 4. 更新依赖
+      # 4. 拉取依赖
       - name: Restore Packages
-        run: flutter pub get
-        working-directory: simple_live_app # 在 simple_live_app 目录下执行
+        run: |
+          cd simple_live_app
+          flutter pub get
 
-      # 5. 安装 flutter_distributor
+      # 5. [新增] 屏蔽 C++ 编译警告 (C4244, C4458)
+      # 这步必须在 flutter pub get 之后，Build 之前运行
+      - name: Suppress C++ Build Warnings
+        shell: powershell
+        run: |
+          $cmakePath = "simple_live_app/windows/CMakeLists.txt"
+          $flagsToSuppress = " /wd4244 /wd4458"
+          
+          if (Test-Path $cmakePath) {
+              $content = Get-Content $cmakePath
+              $pattern = "set\(MSVC_WARNING_OPTIONS"
+              
+              if ($content -match $pattern) {
+                  $replacement = "$pattern $flagsToSuppress"
+                  $content -replace $pattern, $replacement | Set-Content $cmakePath
+                  echo "✅ Successfully injected warning suppression flags."
+              } else {
+                  echo "⚠️ Warning: MSVC_WARNING_OPTIONS not found."
+              }
+          } else {
+              echo "❌ Error: CMakeLists.txt not found at $cmakePath"
+              exit 1
+          }
+
+      # 6. 安装打包工具
       - name: Install flutter_distributor
         run: dart pub global activate flutter_distributor
 
-      # 6. 构建 Windows MSIX 和 ZIP
-      # 注意：如果 MSIX 构建失败（缺少签名），这里只会生成 ZIP。
+      # 7. 执行 Windows 编译 (只打 zip 包)
       - name: Build Windows
-        run: flutter_distributor package --platform windows --targets msix,zip --skip-clean
-        working-directory: simple_live_app # 在 simple_live_app 目录下执行
-
-      # 7. 打印 build 目录结构 (用于调试上传路径的关键步骤)
-      - name: Show build output and Verify Files
         run: |
-          echo "======= Windows build output ======="
-          # 递归列出 simple_live_app/build/ 目录下的所有内容
-          ls build -Recurse
-          
-          echo "--- Attempting to find MSIX/ZIP files ---"
-          # 使用 Get-ChildItem 查找 .msix 和 .zip 文件
-          Get-ChildItem -Path ".\build" -Filter "*.msix" -Recurse -ErrorAction SilentlyContinue
-          Get-ChildItem -Path ".\build" -Filter "*.zip" -Recurse -ErrorAction SilentlyContinue
-        working-directory: simple_live_app
+          cd simple_live_app
+          # 去掉了 msix，只保留 zip
+          flutter_distributor package --platform windows --targets zip --skip-clean
 
-      # 8. 上传产物到 GitHub Artifacts
-      # 路径修正：假定产物在 build/dist/windows/ 或其子目录，使用 ** 匹配
-      - name: Upload Windows APP to Artifacts
+      # 8. 查看构建产物 (使用 PowerShell 语法)
+      - name: Show build output
+        run: |
+          cd simple_live_app
+          echo "======= Windows build output ======="
+          if (Test-Path "build/dist") {
+              Get-ChildItem -Path "build/dist" -Recurse
+          } else {
+              echo "❌ Build directory not found!"
+          }
+
+      # 9. 上传产物
+      - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows
-          # 修正后的路径，** 确保可以找到 dist/windows/ 下的任一位置的文件
+          name: windows-release-zip
           path: |
-            simple_live_app/build/**/*.msix
-            simple_live_app/build/**/*.zip 
-
-      # 9. 输出 job 状态
-      - name: Print Job Status
-        run: echo "🍏 Windows job's status is ${{ job.status }}."
+            simple_live_app/build/dist/**/*.zip
+            simple_live_app/build/dist/**/*.exe
