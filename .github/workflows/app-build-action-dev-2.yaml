@@ -1,230 +1,97 @@
-name: app-build-action-dev-2
+name: Build Windows App (Fast)
 
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "dev_v*"
+    branches: [ master ]
+    paths:
+      - 'simple_live_app/**'
+      - '.github/workflows/**'
 
 jobs:
-  # 打包Android、iOS、Mac
-  build-mac-ios-android:
-    runs-on: macos-latest
-
-    permissions:
-      contents: write
-
-    steps:
-      # 签出代码（已修复，不再使用 ref: dev）
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      # APK签名设置
-      - name: Download Android keystore
-        id: android_keystore
-        uses: timheuer/base64-to-file@v1.2
-        with:
-          fileName: keystore.jks
-          encodedString: ${{ secrets.KEYSTORE_BASE64 }}
-
-      - name: Create key.properties
-        run: |
-          echo "storeFile=${{ steps.android_keystore.outputs.filePath }}" > simple_live_app/android/key.properties
-          echo "storePassword=${{ secrets.STORE_PASSWORD }}" >> simple_live_app/android/key.properties
-          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> simple_live_app/android/key.properties
-          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> simple_live_app/android/key.properties
-
-      # 设置JAVA环境
-      - uses: actions/setup-java@v4
-        with:
-          distribution: "zulu"
-          java-version: "17"
-          cache: "gradle"
-
-      # 设置Flutter
-      - name: Flutter action
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.38.x"
-          cache: true
-
-      # 打开MAC Desktop支持
-      - name: Enable Flutter Desktop
-        run: flutter config --enable-macos-desktop
-
-      # 更新Flutter的packages
-      - name: Restore packages
-        run: |
-          cd simple_live_app
-          flutter pub get
-
-      # 安装appdmg
-      - name: Install appdmg
-        run: npm install -g appdmg
-
-      # 设置flutter_distributor环境
-      - name: Install flutter_distributor
-        run: dart pub global activate flutter_distributor
-
-      # 打包APK
-      - name: Build APK
-        run: |
-          cd simple_live_app
-          flutter build apk --release --split-per-abi
-
-      # 上传APK
-      - name: Upload APK to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: android
-          path: |
-            simple_live_app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            simple_live_app/build/app/outputs/flutter-apk/app-x86_64-release.apk
-
-      # 打包iOS
-      - name: Build IPA
-        run: |
-          cd simple_live_app
-          flutter build ios --release --no-codesign
-
-      # 创建 ipa
-      - name: Create IPA
-        run: |
-          cd simple_live_app
-          mkdir build/ios/iphoneos/Payload
-          cp -R build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/Runner.app
-          cd build/ios/iphoneos/
-          zip -q -r ios_no_sign.ipa Payload
-          cd ../../..
-
-      # 上传IPA
-      - name: Upload IPA to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios
-          path: |
-            simple_live_app/build/ios/iphoneos/ios_no_sign.ipa
-
-      # 打包MacOS
-      - name: Build MacOS
-        run: |
-          cd simple_live_app
-          flutter_distributor package --platform macos --targets dmg,zip --skip-clean
-
-      # 上传MacOS
-      - name: Upload MacOS to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac
-          path: |
-            simple_live_app/build/dist/*/*.dmg
-            simple_live_app/build/dist/*/*.zip
-
-      - run: echo "🍏 This job's status is ${{ job.status }}."
-
-  # 打包Linux
-  build-linux:
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-
-    steps:
-      # 签出代码（已修复）
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      # 设置Flutter环境
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: "3.38.x"
-          cache: true
-
-      # 安装依赖
-      - name: Update apt-get
-        run: sudo apt-get update
-
-      - name: Install Dependencies
-        run: sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libasound2-dev libmpv-dev mpv
-
-      # 打开Linux Desktop支持
-      - name: Enable Flutter Desktop
-        run: flutter config --enable-linux-desktop
-
-      # 更新packages
-      - name: Restore Packages
-        run: |
-          cd simple_live_app
-          flutter pub get
-
-      # 设置flutter_distributor环境
-      - name: Install flutter_distributor
-        run: dart pub global activate flutter_distributor
-
-      # build Linux ZIP/DEB
-      - name: Build Linux
-        run: |
-          cd simple_live_app
-          flutter_distributor package --platform linux --targets deb,zip --skip-clean
-
-      # 上传Linux包
-      - name: Upload Linux APP to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux
-          path: |
-            simple_live_app/build/dist/*/*.deb
-            simple_live_app/build/dist/*/*.zip
-
-      - run: echo "🍏 Linux job's status is ${{ job.status }}."
-
-  # 打包Windows
   build-windows:
     runs-on: windows-latest
     permissions:
       contents: write
 
     steps:
-      # 签出代码（已修复）
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
+          ref: master
           fetch-depth: 1
 
-      # 设置Flutter
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.38.x"
+          channel: 'stable'
           cache: true
+          # 开启 pub cache，加速 pub get
+          cache-key: 'flutter-pub-windows-${{ hashFiles('simple_live_app/pubspec.lock') }}'
+          cache-path: '${{ runner.tool_cache }}/flutter/:channel:-:version:-:arch:'
 
       - name: Enable Flutter Desktop
         run: flutter config --enable-windows-desktop
+
+      # 优化：显式缓存 Pub 依赖 (如果 subosito action 的缓存不够用)
+      - name: Cache Pub Packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\Pub\Cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('simple_live_app/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
 
       - name: Restore Packages
         run: |
           cd simple_live_app
           flutter pub get
 
-      # 设置 flutter_distributor
-      - name: Install flutter_distributor
-        run: dart pub global activate flutter_distributor
+      # 注入防止警告的代码 (保持原样)
+      - name: Suppress C++ Build Warnings
+        shell: powershell
+        run: |
+          $cmakePath = "simple_live_app/windows/CMakeLists.txt"
+          $flagsToSuppress = " /wd4244 /wd4458"
+          if (Test-Path $cmakePath) {
+              $content = Get-Content $cmakePath
+              $pattern = "set\(MSVC_WARNING_OPTIONS"
+              if ($content -match $pattern) {
+                  $replacement = "$pattern $flagsToSuppress"
+                  $content -replace $pattern, $replacement | Set-Content $cmakePath
+                  echo "✅ Successfully injected warning suppression flags."
+              }
+          }
 
-      # build Windows ZIP/MSIX
-      - name: Build Windows
+      # 优化核心：直接构建，不安装 distributor
+      - name: Build Windows Release
         run: |
           cd simple_live_app
-          flutter_distributor package --platform windows --targets msix,zip --skip-clean
+          flutter build windows --release
 
-      # 上传Windows包
-      - name: Upload Windows APP to Artifacts
+      # 优化核心：手动打包 Zip (替代 distributor)
+      - name: Package Windows Zip
+        shell: powershell
+        run: |
+          cd simple_live_app
+          $buildDir = "build\windows\x64\runner\Release"
+          $zipName = "simple_live_app_windows.zip"
+          
+          # 检查构建是否成功
+          if (-Not (Test-Path "$buildDir\simple_live_app.exe")) {
+             Write-Error "Build artifact not found!"
+             exit 1
+          }
+
+          echo "Compressing build artifacts..."
+          # 将 Release 文件夹下的所有内容压缩
+          Compress-Archive -Path "$buildDir\*" -DestinationPath "build\$zipName" -Force
+          
+          echo "✅ Package created at build\$zipName"
+
+      - name: Upload Windows Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows
-          path: |
-            simple_live_app/build/dist/*/*.msix
-            simple_live_app/build/dist/*/*.zip
-
-      - run: echo "🍏 Windows job's status is ${{ job.status }}."
+          name: windows-release-zip
+          path: simple_live_app/build/*.zip
