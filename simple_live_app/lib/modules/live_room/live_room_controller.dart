@@ -82,8 +82,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   var countdown = 60.obs;
 
   Timer? autoExitTimer;
-  /// 在线人数轮询定时器
-  Timer? _onlinePollingTimer;
 
   /// 设置的自动关闭时间（分钟）
   var autoExitMinutes = 60.obs;
@@ -108,6 +106,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   // 开播时长状态变量
   var liveDuration = "00:00:00".obs;
   Timer? _liveDurationTimer;
+  Timer? _hotTimer; // 人气刷新定时器
 
   @override
   void onInit() {
@@ -181,7 +180,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     //messages.clear();
     superChats.clear();
     liveDanmaku.stop();
-    _onlinePollingTimer?.cancel(); // 刷新时停止在线人数轮询
 
     loadData();
   }
@@ -251,11 +249,12 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
           ),
         ),
       ]);
+    } else if (msg.type == LiveMessageType.online) {
+      // online.value = msg.data; // 改为轮询接口获取，屏蔽ws更新
     } else if (msg.type == LiveMessageType.superChat) {
       superChats.add(msg.data);
     }
   }
-  // 注意：已移除 LiveMessageType.online 的处理逻辑，在线人数将通过轮询更新。
 
   /// 添加一条系统消息
   void addSysMsg(String msg) {
@@ -277,44 +276,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
   /// WebSocket准备就绪
   void onWSReady() {
     addSysMsg("弹幕服务器连接正常");
-  }
-
-  /// 独立获取在线人数的方法
-  void fetchOnlineUsers() async {
-    if (detail.value == null) {
-      return;
-    }
-
-    // 如果直播已停止，则停止轮询
-    if (!liveStatus.value) {
-      _onlinePollingTimer?.cancel();
-      return;
-    }
-
-    try {
-      // 重新获取直播间详情，获取最新的在线人数
-      var newDetail = await site.liveSite.getRoomDetail(roomId: roomId);
-
-      // 更新在线人数
-      online.value = newDetail.online;
-    } catch (e) {
-      Log.d("获取在线人数失败: $e");
-      // 轮询失败时不给用户提示，避免频繁打扰
-    }
-  }
-
-  /// 启动在线人数轮询
-  void startOnlinePolling() {
-    // 确保之前没有定时器在运行
-    _onlinePollingTimer?.cancel();
-
-    // 立即获取一次在线人数
-    fetchOnlineUsers();
-
-    // 设置 10 秒轮询一次 (可根据需求调整频率)
-    _onlinePollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      fetchOnlineUsers();
-    });
   }
 
   /// 加载直播间信息
@@ -359,14 +320,8 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       addHistory();
       // 确认房间关注状态
       followed.value = DBService.instance.getFollowExist("${site.id}_$roomId");
-      liveStatus.value = detail.value!.status || detail.value!.isRecord;
-      
-      // 1. 初始化在线人数
       online.value = detail.value!.online;
-
-      // 2. 启动在线人数轮询
-      startOnlinePolling();
-
+      liveStatus.value = detail.value!.status || detail.value!.isRecord;
       if (liveStatus.value) {
         getPlayQualites();
       }
@@ -377,6 +332,7 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
       initDanmau();
       liveDanmaku.start(detail.value?.danmakuData);
       startLiveDurationTimer(); // 启动开播时长定时器
+      startHotTimer(); // 启动人气刷新定时器
     } catch (e) {
       Log.logPrint(e);
       //SmartDialog.showToast(e.toString());
@@ -385,6 +341,18 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     } finally {
       SmartDialog.dismiss(status: SmartStatus.loading);
     }
+  }
+
+  void startHotTimer() {
+    _hotTimer?.cancel();
+    _hotTimer = Timer.periodic(const Duration(seconds: 10), (timer) async {
+      try {
+        var latestDetail = await site.liveSite.getRoomDetail(roomId: roomId);
+        online.value = latestDetail.online;
+      } catch (e) {
+        // ignore
+      }
+    });
   }
 
   /// 初始化播放器
@@ -506,7 +474,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     // 遍历线路，如果全部链接都断开就是直播结束了
     if (playUrls.length - 1 == currentLineIndex) {
       liveStatus.value = false;
-      _onlinePollingTimer?.cancel(); // 直播结束，停止在线人数轮询
     } else {
       changePlayLine(currentLineIndex + 1);
 
@@ -1029,7 +996,6 @@ class LiveRoomController extends PlayerController with WidgetsBindingObserver {
     messages.clear();
     superChats.clear();
     danmakuController?.clear();
-    _onlinePollingTimer?.cancel(); // 重置房间时取消在线人数轮询
 
     // 重新设置LiveDanmaku
     liveDanmaku = site.liveSite.getDanmaku();
@@ -1104,11 +1070,11 @@ ${error?.stackTrace}''');
     WidgetsBinding.instance.removeObserver(this);
     scrollController.removeListener(scrollListener);
     autoExitTimer?.cancel();
-    _onlinePollingTimer?.cancel(); // 页面关闭时取消在线人数轮询定时器
 
     liveDanmaku.stop();
     danmakuController = null;
     _liveDurationTimer?.cancel(); // 页面关闭时取消定时器
+    _hotTimer?.cancel();
     super.onClose();
   }
 }
