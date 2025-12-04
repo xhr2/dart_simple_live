@@ -1,0 +1,76 @@
+name: Build Windows Only
+
+# 触发条件
+on:
+  # 允许在 Actions 页面手动点击按钮触发
+  workflow_dispatch:
+  # 也可以在推送到 master 分支时自动触发
+  push:
+    branches:
+      - master
+    paths:
+      - 'simple_live_app/**'
+      - '.github/workflows/app-build-action-Windows.yaml'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      # 1. 检出代码
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # 2. 配置 Flutter 环境
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # 建议使用 stable 渠道，或者指定你确定的具体版本
+          channel: 'stable' 
+          # 如果你确实需要特定版本，取消下面注释并修改版本号
+          # flutter-version: "3.24.x"
+          cache: true
+
+      # 3. 开启 Windows 桌面端支持
+      - name: Enable Flutter Desktop
+        run: flutter config --enable-windows-desktop
+
+      # 4. 拉取依赖
+      - name: Restore Packages
+        run: |
+          cd simple_live_app
+          flutter pub get
+
+      # 5. 安装打包工具 flutter_distributor
+      - name: Install flutter_distributor
+        run: dart pub global activate flutter_distributor
+
+      # 6. 执行 Windows 编译 (打包为 zip 和 msix)
+      - name: Build Windows
+        run: |
+          cd simple_live_app
+          # 注意：生成 msix 通常需要签名配置，如果报错可以尝试去掉 msix 只保留 zip
+          flutter_distributor package --platform windows --targets msix,zip --skip-clean
+
+      # 7. 查看构建结果 (调试用)
+      - name: Show build output
+        run: |
+          cd simple_live_app
+          echo "======= Windows build output ======="
+          # 列出 build/dist 目录下的文件，确认生成位置
+          dir build\dist /s
+
+      # 8. 上传构建产物供下载
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          # 使用通配符匹配生成的安装包
+          path: |
+            simple_live_app/build/dist/**/*.msix
+            simple_live_app/build/dist/**/*.zip
+            simple_live_app/build/dist/**/*.exe
